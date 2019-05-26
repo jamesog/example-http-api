@@ -10,5 +10,5 @@ type Storage interface {
 // User is an application user.
 type User struct {
 	ID   int    `json:"id" db:"id"`
-	Name string `json:"user" db:"user"`
+	Name string `json:"user" db:"name"`
 }
