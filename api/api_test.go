@@ -33,7 +33,7 @@ func TestGetUsers(t *testing.T) {
 		t.Run(tt.Name, func(t *testing.T) {
 			req := httptest.NewRequest("GET", "/users", nil)
 			w := httptest.NewRecorder()
-			api.GetUsers(w, req)
+			api.GetUsersHTTP(w, req)
 			resp := w.Result()
 			body, _ := ioutil.ReadAll(resp.Body)
 

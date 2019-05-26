@@ -22,13 +22,13 @@ func NewService(db database.Storage) *API {
 // Routes returns the API routes.
 func (api *API) Routes() http.Handler {
 	r := chi.NewRouter()
-	r.Get("/users", api.GetUsers)
+	r.Get("/users", api.GetUsersHTTP)
 
 	return r
 }
 
-// GetUsers handles GET /users.
-func (api *API) GetUsers(w http.ResponseWriter, r *http.Request) {
+// GetUsersHTTP handles GET /users.
+func (api *API) GetUsersHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	users, err := api.db.Users(ctx)
 	if err != nil {
