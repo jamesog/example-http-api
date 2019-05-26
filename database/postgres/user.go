@@ -20,7 +20,10 @@ func (db *DB) Users(ctx context.Context) ([]database.User, error) {
 	users := make([]database.User, 0)
 	for rows.Next() {
 		var user database.User
-		rows.StructScan(&user)
+		if err := rows.StructScan(&user); err != nil {
+			db.log.Err(err).Msg("StructScan error")
+		}
+
 		users = append(users, user)
 	}
 
