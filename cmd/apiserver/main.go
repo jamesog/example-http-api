@@ -11,11 +11,13 @@ import (
 
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
+	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/jamesog/example-http-api/api"
 	"github.com/jamesog/example-http-api/database"
 	"github.com/jamesog/example-http-api/database/postgres"
 	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 )
 
@@ -45,11 +47,19 @@ func (api *rpcapi) use(mw func(ctx context.Context, req interface{}, info *grpc.
 }
 
 func (api *rpcapi) rpclog(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	p, _ := peer.FromContext(ctx)
+	remote, _, _ := net.SplitHostPort(p.Addr.String())
+
 	start := time.Now()
 	resp, err := handler(ctx, req)
 	dur := time.Since(start)
 	s, _ := status.FromError(err)
-	api.log.Info().Str("rpc", info.FullMethod).Str("code", s.Code().String()).Str("duration", dur.String()).Msg(s.Message())
+	api.log.Info().
+		Str("rpc", info.FullMethod).
+		Str("remote", remote).
+		Str("code", s.Code().String()).
+		Str("duration", dur.String()).
+		Msg(s.Message())
 	return resp, err
 }
 
@@ -92,7 +102,7 @@ func grpcServer(db database.Storage) {
 	apisvc.use(apisvc.rpclog)
 	apisvc.use(apisvc.rpcmetric)
 
-	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(apisvc.rpcMiddleware))
+	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(grpc_middleware.ChainUnaryServer(apisvc.mw...)))
 	api.RegisterExampleServiceServer(grpcServer, apisvc)
 	log.Fatal(grpcServer.Serve(lis))
 }
