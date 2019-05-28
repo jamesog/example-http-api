@@ -1,17 +1,22 @@
 package main
 
 import (
+	"context"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	"github.com/jamesog/example-http-api/api"
 	"github.com/jamesog/example-http-api/database"
 	"github.com/jamesog/example-http-api/database/postgres"
+	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/status"
 )
 
 func httpServer(db database.Storage) {
@@ -29,6 +34,47 @@ func httpServer(db database.Storage) {
 	log.Fatal(http.ListenAndServe(listen, r))
 }
 
+type rpcapi struct {
+	*api.API
+	log zerolog.Logger
+	mw  []grpc.UnaryServerInterceptor
+}
+
+func (api *rpcapi) use(mw func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error)) {
+	api.mw = append(api.mw, mw)
+}
+
+func (api *rpcapi) rpclog(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	start := time.Now()
+	resp, err := handler(ctx, req)
+	dur := time.Since(start)
+	s, _ := status.FromError(err)
+	api.log.Info().Str("rpc", info.FullMethod).Str("code", s.Code().String()).Str("duration", dur.String()).Msg(s.Message())
+	return resp, err
+}
+
+func (api *rpcapi) rpcmetric(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	// Pretend this records metrics
+	start := time.Now()
+	resp, err := handler(ctx, req)
+	dur := time.Since(start)
+	fmt.Printf("Metric: %s\n", dur)
+
+	return resp, err
+}
+
+func (api *rpcapi) rpcMiddleware(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	if len(api.mw) == 0 {
+		return handler(ctx, req)
+	}
+
+	resp, err := api.mw[len(api.mw)-1](ctx, req, info, handler)
+	for i := len(api.mw) - 2; i >= 0; i-- {
+		resp, err = api.mw[i](ctx, req, info, handler)
+	}
+	return resp, err
+}
+
 func grpcServer(db database.Storage) {
 	listen := os.Getenv("GRPC_ADDR")
 	if listen == "" {
@@ -40,9 +86,13 @@ func grpcServer(db database.Storage) {
 		log.Fatal(err)
 	}
 
-	apisvc := api.NewService(db)
+	l := zerolog.New(os.Stderr).With().Timestamp().Logger().Level(zerolog.InfoLevel)
+	apisvc := rpcapi{API: api.NewService(db), log: l}
 
-	grpcServer := grpc.NewServer()
+	apisvc.use(apisvc.rpclog)
+	apisvc.use(apisvc.rpcmetric)
+
+	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(apisvc.rpcMiddleware))
 	api.RegisterExampleServiceServer(grpcServer, apisvc)
 	log.Fatal(grpcServer.Serve(lis))
 }

@@ -4,13 +4,16 @@ package api
 
 import (
 	context "context"
+
+	codes "google.golang.org/grpc/codes"
+	status "google.golang.org/grpc/status"
 )
 
 // GetUsers is the protobuf interface for retrieving users.
 func (api *API) GetUsers(ctx context.Context, in *UserRequest) (*UserList, error) {
 	dbUsers, err := api.db.Users(ctx)
 	if err != nil {
-		return nil, err
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 
 	// Protobuf calls the ID field Id, so we can't just do a type conversion
