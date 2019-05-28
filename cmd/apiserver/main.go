@@ -18,6 +18,7 @@ import (
 	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/peer"
+	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
 )
 
@@ -104,6 +105,7 @@ func grpcServer(db database.Storage) {
 
 	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(grpc_middleware.ChainUnaryServer(apisvc.mw...)))
 	api.RegisterExampleServiceServer(grpcServer, apisvc)
+	reflection.Register(grpcServer)
 	log.Fatal(grpcServer.Serve(lis))
 }
 
